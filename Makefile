@@ -21,7 +21,7 @@ DEVICE     = attiny4313
 CLOCK      = 16000000
 PROGRAMMER = #-c stk500v2 -P avrdoper
 OBJECTS    = main.o DmxSlave.o
-FUSES      = -U hfuse:w:0xdf:m -U lfuse:w:0xce:m -U efuse:w:0xff:m
+FUSES      = -U hfuse:w:0xde:m -U lfuse:w:0xff:m -U efuse:w:0xfe:m
 
 # ATMega8 fuse bits used above (fuse bits for other devices are different!):
 # Example for 8 MHz internal oscillator

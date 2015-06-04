@@ -20,31 +20,26 @@
 #define R_PWM_PIN   2
 #define G_PWM_PIN   3
 #define B_PWM_PIN   4
-// 0x01 - DIV1
-// 0x02 - DIV8
-// 0x03 - DIV64
-// 0x04 - DIV256
-// 0x05 - DIV1024
-#define TIMER_PRESCALE 0x01
 
-// DMX Variables.
+#define TIMER_PRESCALE 0x01
+// For a 16MHz clock, use 0x00 and 0x03.
+// For a 8MHz clock, use 0x00 and 0x01.
+#define DMX_BAUD_DIVIDER_HIGH   0x00
+#define DMX_BAUD_DIVIDER_LOW    0x03
+
+// Addresses occupied by the DMX light.
+#define DMX_ADDRESS_SPACE 4
+
+// DMX State Variables.
 uint16_t dmxBaseAddress = 0;
 uint8_t dmxEnabled = 0;
 
 // ISR Variables.
-// We could store these in the ISR but then all the processing would drag out
-// the ISR far longer than appropriate.
-// This way, the ISR updates all of the state variables and then leaves it to
-// the main loop to process the data fast enough to keep up.
-uint16_t addressCount = 1;
-volatile uint8_t statusByte = 0;
-volatile uint8_t latestData = 0;
-volatile uint8_t dmxDataWaiting = 0;
-
 uint8_t r_trig;
 uint8_t g_trig;
 uint8_t b_trig;
 
+// Double Buffering Variables.
 uint8_t channelData1[DMX_ADDRESS_SPACE];
 uint8_t channelData2[DMX_ADDRESS_SPACE];
 uint8_t bufferFlag = 0;
@@ -58,25 +53,11 @@ void dmxSlaveEnableDmxControl(void);
 
 // Interrupt Service Routines.
 
-// UART Character Received ISR.
-//ISR(USART0_RX_vect) {
-	//#warning debug
-	//PORTA ^= 0x02;
-	//if (dmxDataWaiting) {
-		//_NOP();
-	//}
-    //statusByte = UCSRA;
-    //latestData = UDR;
-	//dmxDataWaiting = 1;
-	//#warning debug
-	//PORTA ^= 0x02;
-//}
-
 ISR(USART0_RX_vect, ISR_BLOCK) {
-	static addressCount = 1;
+	static uint16_t addressCount = 1;
 	static uint8_t* dataBuffer = channelData1;
-	statusByte = UCSRA;
-	latestData = UDR;
+	uint8_t statusByte = UCSRA;
+	uint8_t latestData = UDR;
 	
 	// Detected a Break Character.
 	if (statusByte & (1 << 4)) {
@@ -107,7 +88,6 @@ ISR(USART0_RX_vect, ISR_BLOCK) {
 	addressCount++;
 }
 
-
 ISR(TIMER0_OVF_vect, ISR_BLOCK) {
 	static uint8_t count = 0;
 	static uint8_t r_state = 0;
@@ -134,10 +114,9 @@ ISR(TIMER0_OVF_vect, ISR_BLOCK) {
 	count++;
 }
 
+// Standard Functions
+
 void dmxSlaveProcessData(void) {
-	#warning Here to disable USART
-	//dmxEnabled = 0;
-	//dmxBaseAddress = 7;
 	if (dmxEnabled) {
 		dmxSlaveProcessUart();
 	}
@@ -148,7 +127,7 @@ void dmxSlaveProcessData(void) {
 
 void dmxSlaveProcessManual(void) {
 	// In this mode, the colour of the LED is determined by the settings of the dipswiches.
-	// Where 3 pins are associated with each colour, allowing for 8 levels for each colour.
+	// Where 3 pins are associated with each colour, allowing for 8 possible levels.
 	// In this situation, the "Master" channel is ignored (set to maximum).
 	// To get the status of the dipswitches, we read the current DMX address.
 	channelData1[0] = 255;
@@ -171,12 +150,12 @@ void dmxSlaveProcessUart(void) {
 }
 
 void dmxSlaveUpdatePwm(uint8_t* channelData) {
-	//r_trig = (uint8_t)(((channelData[0] * channelData[1]) / 255));
-	//g_trig = (uint8_t)(((channelData[0] * channelData[2]) / 255));
-	//b_trig = (uint8_t)(((channelData[0] * channelData[3]) / 255));
-	r_trig = (uint8_t)(((channelData[0] * channelData[1]) >> 8));
-	g_trig = (uint8_t)(((channelData[0] * channelData[2]) >> 8));
-	b_trig = (uint8_t)(((channelData[0] * channelData[3]) >> 8));
+	//trig = (Master * colourData) / 255;
+	// The ATtiny4313 is has to perform multiplication and division in software,
+	// so it is much faster to use a bitshift to approximate the division by 255.
+	r_trig = (uint8_t)((channelData[0] * channelData[1]) >> 8);
+	g_trig = (uint8_t)((channelData[0] * channelData[2]) >> 8);
+	b_trig = (uint8_t)((channelData[0] * channelData[3]) >> 8);
     return;
 }
 
@@ -184,6 +163,7 @@ void dmxSlaveUpdateStatus(void) {
 	// Check whether we are operating in Manual or DMX mode.
 	// Also update the DMX Address from the dipswitches.
 	// If a pin is grounded, it is considered "ON" from the dipswitch.
+	// The PD5 dipswitch determines whether DMX or manual control is enabled.
 	if (PIND & (1 << 5)) {
 		dmxSlaveDisableDmxControl();
 	}
@@ -191,16 +171,15 @@ void dmxSlaveUpdateStatus(void) {
 		dmxSlaveEnableDmxControl();
 	}
 	
-	#warning Fix this
-	
+	// The DMX address (or manual colour setting) is made up of a 9-bit integer. 
+	// The most significant bit being attached to PD6. The remaining 8 bits 
+	// are in port order on GPIO Port B.
 	if (PIND & (1 << 6)) {
-		// If PD6 is high
 		dmxBaseAddress = (uint8_t)~(PINB);
 	}
 	else {
 		dmxBaseAddress = ((uint8_t)~(PINB)) | (1 << 8);
 	}
-	//dmxBaseAddress = ~(((PIND & (1 << 6)) << 2) & PINB);
 }
 
 void dmxSlaveDisableDmxControl(void) {
@@ -213,12 +192,6 @@ void dmxSlaveEnableDmxControl(void) {
 	// Enable the USART Receiver and Rx Interrupt.
 	UCSRB = (1 << 7) | (1 << 4);
 	dmxEnabled = 1;
-}
-
-void debugInit() {
-	#warning debug
-	DDRD |= 0x02;
-	DDRB |= 0x07;
 }
 
 void dmxSlaveInit(uint16_t baseAddress) {
@@ -281,7 +254,4 @@ void dmxSlaveInit(uint16_t baseAddress) {
 
 	// Globally enable interrupts.
 	sei();
-	
-	#warning debug
-	//debugInit();
 }

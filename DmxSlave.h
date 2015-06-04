@@ -18,13 +18,6 @@
 extern "C" {
 #endif
 
-// For a 16MHz clock, use 0x00 and 0x03.
-// For a 8MHz clock, use 0x00 and 0x01.
-#define DMX_BAUD_DIVIDER_HIGH   0x00
-#define DMX_BAUD_DIVIDER_LOW    0x03
-
-#define DMX_ADDRESS_SPACE 4
-
 // Public Function Prototypes.
 void dmxSlaveInit(uint16_t baseAddress);
 void dmxSlaveProcessData(void);

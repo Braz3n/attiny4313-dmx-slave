@@ -2,7 +2,7 @@
 
 Use an ATtiny4313 as a four-channel DMX slave with a 10-bit dip-switch control interface. The basic functionality has been implemented and some basic testing suggests that the code behaves correctly. Further testing is necessary to ensure no edge cases exist.
 
-A description of the DMX protocol can be found [here](http://www.dmx512-online.com/packt.html).
+A description of the DMX protocol can be found [here](http://www.dmx512-online.com/packt.html). A schematic of the hardware is available in the repository.
 
 ## Details
 
@@ -18,7 +18,7 @@ Due to differences in the AT892051 and ATtiny4313, the external reset pin is dis
 
 Pin | Function  | Pin | Function
 :---|:----------|:----|:----------
-1   | NC        | 11  | VCC
+1   | RESET     | 11  | VCC
 2   | UART Rx   | 12  | DIP7
 3   | UART Tx   | 13  | DIP6
 4   | XTAL      | 14  | DIP5

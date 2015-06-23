@@ -19,7 +19,7 @@ extern "C" {
 #endif
 
 // Public Function Prototypes.
-void dmxSlaveInit(uint16_t baseAddress);
+void dmxSlaveInit(void);
 void dmxSlaveProcessData(void);
 void dmxSlaveUpdateStatus(void);
 

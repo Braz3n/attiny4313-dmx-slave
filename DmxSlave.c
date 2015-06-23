@@ -58,7 +58,7 @@ ISR(USART0_RX_vect, ISR_BLOCK) {
 	static uint8_t* dataBuffer = channelData1;
 	uint8_t statusByte = UCSRA;
 	uint8_t latestData = UDR;
-	
+
 	// Detected a Break Character.
 	if (statusByte & (1 << 4)) {
 		addressCount = 0;
@@ -84,7 +84,7 @@ ISR(USART0_RX_vect, ISR_BLOCK) {
 			bufferFlag = 2;
 		}
 	}
-	
+
 	addressCount++;
 }
 
@@ -134,7 +134,7 @@ void dmxSlaveProcessManual(void) {
 	channelData1[1] = (36 * ((dmxBaseAddress >> 6) & 0x07));
 	channelData1[2] = (36 * ((dmxBaseAddress >> 3) & 0x07));
 	channelData1[3] = (36 * ((dmxBaseAddress >> 0) & 0x07));
-	
+
 	dmxSlaveUpdatePwm(channelData1);
 }
 
@@ -170,9 +170,9 @@ void dmxSlaveUpdateStatus(void) {
 	else {
 		dmxSlaveEnableDmxControl();
 	}
-	
-	// The DMX address (or manual colour setting) is made up of a 9-bit integer. 
-	// The most significant bit being attached to PD6. The remaining 8 bits 
+
+	// The DMX address (or manual colour setting) is made up of a 9-bit integer.
+	// The most significant bit being attached to PD6. The remaining 8 bits
 	// are in port order on GPIO Port B.
 	if (PIND & (1 << 6)) {
 		dmxBaseAddress = (uint8_t)~(PINB);
@@ -194,29 +194,29 @@ void dmxSlaveEnableDmxControl(void) {
 	dmxEnabled = 1;
 }
 
-void dmxSlaveInit(uint16_t baseAddress) {
-    // Set the private variables.
-    dmxBaseAddress = baseAddress;
-    memset(channelData1, 0, DMX_ADDRESS_SPACE);
+void dmxSlaveInit(void) {
+  // Set the private variables.
+  dmxSlaveUpdateStatus();
+  memset(channelData1, 0, DMX_ADDRESS_SPACE);
 	memset(channelData2, 0, DMX_ADDRESS_SPACE);
 
-    // Configure the UART Controller.
-    // Set the UART Baud Rate.
-    // Baud Rate = 250000.
-    UBRRH = DMX_BAUD_DIVIDER_HIGH;
-    UBRRL = DMX_BAUD_DIVIDER_LOW;
-    // Set the UART Frame Format.
-    // 8N2 UART.
-    UCSRC = (0x01 << 3) | (0x03 << 1);
-    // Enable the Rx Complete Interrupt and the UART Receiver.
-    UCSRB = (1 << 7) | (1 << 4);
+  // Configure the UART Controller.
+  // Set the UART Baud Rate.
+  // Baud Rate = 250000.
+  UBRRH = DMX_BAUD_DIVIDER_HIGH;
+  UBRRL = DMX_BAUD_DIVIDER_LOW;
+  // Set the UART Frame Format.
+  // 8N2 UART.
+  UCSRC = (0x01 << 3) | (0x03 << 1);
+  // Enable the Rx Complete Interrupt and the UART Receiver.
+  UCSRB = (1 << 7) | (1 << 4);
 
-    // Configure the GPIO Outputs.
-    // PD2, PD3 and PD4 are the PWM outputs.
-    // Set Data Direction as Output.
-    DDRD |= (0x07 << 2);
-    // Set pins to Output Low.
-    PORTD &= ~(0x07 << 2);
+  // Configure the GPIO Outputs.
+  // PD2, PD3 and PD4 are the PWM outputs.
+  // Set Data Direction as Output.
+  DDRD |= (0x07 << 2);
+  // Set pins to Output Low.
+  PORTD &= ~(0x07 << 2);
 	// PB0..7 are Dipswitch 0..7.
 	DDRB = 0x00;
 	PORTB = 0x00;
@@ -228,29 +228,36 @@ void dmxSlaveInit(uint16_t baseAddress) {
 	DDRD &= ~(1 << 5);
 	PORTD |= (1 << 5);
 
-    // Configure Timer/Counter 0.
-    // Set the Output/Compare registers to zero.
-    //OCR0A = 0x00;
+  // Configure Timer/Counter 0.
+  // Set the Output/Compare registers to zero.
+  //OCR0A = 0x00;
 	OCR0A = 0x80;
-    OCR0B = 0x00;
-    // Enable timer without the prescaler.
-    TCCR0B = TIMER_PRESCALE;
+  OCR0B = 0x00;
+  // Enable timer without the prescaler.
+  TCCR0B = TIMER_PRESCALE;
 
-    // Configure Timer/Counter 1.
-    // Configure the timer for CTC mode, using OCR1A for TOP.
-    // Enable the timer without the prescaler.
-    TCCR1B = 0x08 | TIMER_PRESCALE;
+  // Configure Timer/Counter 1.
+  // Configure the timer for CTC mode, using OCR1A for TOP.
+  // Enable the timer without the prescaler.
+  TCCR1B = 0x08 | TIMER_PRESCALE;
 	//TCCR1B = 0x01;
-    // Set the Output/Compare registers.
-    // Set OCR1A to 255 to limit the maximum timer value.
-    OCR1A = 0xFF;
-    // Set OCR1B to 0, as it will be used for output compare matches.
-    OCR1B = 0x00;
+  // Set the Output/Compare registers.
+  // Set OCR1A to 255 to limit the maximum timer value.
+  OCR1A = 0xFF;
+  // Set OCR1B to 0, as it will be used for output compare matches.
+  OCR1B = 0x00;
 
-    // Configure Timer/Counter overflow and output compare interrupts.
+  // Configure Timer/Counter overflow and output compare interrupts.
 	// In this situation, the OCR1A interrupt replaces the overflow interrupt.
-    //TIMSK = 0x67;
+  //TIMSK = 0x67;
 	TIMSK = 0x02;
+
+	// Flash the LEDs briefly when initialised in to indicate everything is working.
+	RGB_PORT |= ((1 << R_PWM_PIN) | (1 << G_PWM_PIN) | (1 << B_PWM_PIN));
+	for (uint16_t i=0;i<65535;i++) {
+		// Short loop. Should last for ~4ms at 16MHz, which should be plenty.
+		continue;
+	}
 
 	// Globally enable interrupts.
 	sei();
